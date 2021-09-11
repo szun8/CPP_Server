@@ -1,54 +1,57 @@
 ﻿#include "pch.h"
 #include "CorePch.h"
 #include <iostream>
+// windows / Linux 환경에서 공용으로 스레드 생성 가능한 헤더
+#include <thread> 
+#include <atomic>
 
-#include <thread> // windows / Linux 환경에서 공용으로 스레드 생성 가능한 헤더
+// part4 ) 1-3. Atomic (All-Or-Nothing)
+// atom : 원자
+// 멀티쓰레드에서 stack은 각기 다른 영역으로 데이터를 차지하고 있음
+// 해당 연산을 쓰면, 한 연산에서 atomic변수를 건드릴 때 다른 연산이 지금 연산에 침범하지 않도록 cpu 내에서 막아버리는? 기다리게하는 과정을 처리함
 
-// Entry Point : 실행하자마자 thread에 바로 실행시켜주는 (메인)함수를 지정가능
-void HelloThread() {
-	cout << "Hello Thread!" << endl;
+atomic<int32> sum = 0;	// 전역(Heap), 공유데이터
+
+void Add() {
+	for (int32 i = 0; i < 100'0000; i++) {
+		sum.fetch_add(1);
+		// ++sum;
+		// 어셈블리어(3줄?) = cpu에서 메모리를 꺼내오고 연산하는 것을 동시에 할 수 없음
+		// int32 eax = sum;		// 1. eax = 0
+		// eax = eax + 1;		// 2. eax = 1
+		// sum = eax;			// 3. sum = 1
+	}
 }
 
-void HelloThread_2(int32 num) {
-	cout << num << endl;
-	// 출력이 뒤죽박죽 -> 순서를 보장해서 출력하는게 아닌, 병렬처리 구조이기에 어떤 thread가 먼저 처리될지 모름
+void Sub() {
+	for (int32 i = 0; i < 100'0000; i++) {
+		sum.fetch_add(-1);
+		// --sum;
+		// int32 eax = sum;		// 1. eax = 0
+		// eax = eax - 1;		// 2. eax = -1
+		// sum = eax;			// 3. sum = -1
+	}
 }
+// 멀티쓰레드 환경에서 두개를 동시에 실행한다면, 어떤 것이 먼저실행되고 나중에 실행될진 모르지만,
+// 섞여서 실행 후, 값이 덮어쓰여서 값의 충돌로 오류가 발생 => if 1st tried, sum = 1 or -1
+// 공유데이터의 단점 (수정시)
+
+// 동기화 : 공유데이터를 다룰때 순서를 정해줘야하는 경우
+// 애초에 1~3번의 단계를 한번에 실행해주면 값의 충돌현상을 없앨 수 있음 (오류제거) = 동기화 기법 사용
+// => Atomic 연산 : All-Or-Nothing 다 실행이 되거나 아예 안하거나 둘중 하나의 상황만 존재할 수 있는 경우의 연산, 연산이 근데 느리김함(필요한 경우만, 병목현상 발생가능)
+
 int main()
 {
-	// System Call (OS 커널 요청)
-	// cout << "Hello World" << endl; => 꽤나 가벼운 작업은 아님
-	// thread 생성도 마찬가지로 OS 요청으로 처리/생성되기에 무거운 작업
+	Add();
+	Sub();
+	cout << sum << endl;	// 0
 
-	// HelloThread(); => main thread 에서 실행
-	std::thread t;	// 생성만 된 상태 => id == 0
-	auto id1 = t.get_id();
+	std::thread t1(Add);
+	std::thread t2(Sub);
+	t1.join();
+	t2.join();
 
-	t = std::thread(HelloThread);	// 여기서부터 t thread 실행
-	auto id2 = t.get_id();		// 쓰레드마다 ID(구분)
+	cout << sum << endl;	// (?) 엉뚱한 숫자 -> atomic -> 0 (!)
 
-	std::thread t2(HelloThread_2, 10);
-
-	vector<std::thread> v;
-	for (int32 i = 0; i < 10; ++i) {
-		v.push_back(std::thread(HelloThread_2, i));
-	}
-	for (int32 i = 0; i < 10; ++i) {
-		if (v[i].joinable())
-			v[i].join();
-	}
-	
-	int32 count = t.hardware_concurrency(); // CPU 코어 개수?
-	// t.detach();= std::thread 객체(t)에서 실제 쓰레드를 분리 / main thread랑 t thread랑 떼어주는?분리시키는? 함수 => 단, 그렇게되면 t thread의 정보추출은 불가해짐
-	
-	cout << "Hello Main" << endl;
-	// Q. t thread보다 main thread가 먼저 종료되면 error
-	if (t.joinable()) { // 해당 쓰레드 객체가 실행되고 있는지 아닌지 확인 (id != 0 ?)
-		t.join();		// A. 끝까지 책임져주는 함수 join() : 지정해준 entry point 함수가 끝나고 main thread를 종료하게 함
-	}					// 그래서 해당 쓰레드가 실행되고 있으면 끝까지 책임져주는 join을 쓰고 아니면 그냥 끝내도 괜찮은 코드로 설계
-						/*_NODISCARD bool joinable() const noexcept {
-							return _Thr._Id != 0;
-						}*/
-
-	if (t2.joinable())
-		t2.join();
+	return 0;
 }
