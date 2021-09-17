@@ -5,95 +5,57 @@
 #include <thread> 
 #include <atomic>
 #include <mutex>	// Lock
+#include <windows.h>
 
-// part4 ) 1-8 Sleep
-
-class SpinLock {
-public:
-	void lock() {
-		// 여기서는 아무리 쓸떼없디고 인식된 코드여도 다른 쓰레드가 건드릴 수 있기에?
-		// volatile 호출이 필요 => atomic 에서 해결
-
-		// CAS (Compare-And-Swap)
-		bool expected = false;
-		bool desired = true;
-
-		// CAS (compare_exchange_strong) 의사코드
-		//if (_locked == expected) {
-		//	expected = _locked;
-		//	_locked = desired;
-		//	return true;
-		//}
-		//else {	// expected 값이 false 라면, (다른 누가 이미 소유하는중)
-		//	expected = _locked;
-		//	return false;
-		//}
-
-		// 내가 이길때까지 계속 뺑뺑이를 도는 SpinLock의 개념
-		while (_locked.compare_exchange_strong(expected, desired) == false) {
-			// 실패했으면 성공할때(true)까지 계속 돌기
-			// expected는 bool &값을 받고 있어서 매번 값이 바뀌기에
-			// 우리가 원했던 초창기 값으로 바꿔주는 것만 넣어주면 됨 (조심)
-			expected = false;
-
-			//this_thread::sleep_for(std::chrono::milliseconds(100));
-			this_thread::sleep_for(100ms);
-			// 언제까지 자라 (그 시간동안 재스케줄링이 되지않고 대기를 타다
-			// 시간 경과후, 다시 스케줄링 대상이 돼서 이 쓰레드 실행가능상태 전환)
-
-			this_thread::yield();
-			// 자기가 받은 타임-슬라이스를 바로 양보해 커널모드로 돌아가기
-			// this_thread::sleep_for(0ms); 랑 같은 표현
-			}
-
-		/*while (_locked) {
-			// 두번으로 나뉘어 실행되는 해당 코드를 위에서 한방에 처리
-		}
-		_locked = true;*/
-	}
-
-	void unlock() {
-		// _locked = false; bool의 값인지 정확히 알기 어려우니 아래 코드로
-		_locked.store(false);
-	}
-private:
-	atomic<bool> _locked = false;	// volatile (C++) 컴파일러에게 최적화를 하지말아달라 부탁 ( + C# 메모리배려, 가시성)
-};
-
+// part4 ) 1-9 Event
+	
 mutex m;
-int32 sum = 0;
-SpinLock spinLock;
+queue<int32> q;
+HANDLE handle;	// handle : 어떤 Event인지 구분해주는 식별자
 
-void Add() {
-	for (int32 i = 0; i < 10'0000; ++i) {
-		lock_guard<SpinLock> guard(spinLock);
-		sum++;
+void Producer() {
+	while (true) {
+		{
+			unique_lock<mutex> lock(m);
+			q.push(100);
+		}
+		::SetEvent(handle);	// 데이터가 넣어지면, 해당 커널오브젝트를 파란불로 바꿔주세요 -> Consumer 실행!
+		this_thread::sleep_for(1000000ms);	// 느리게 데이터 삽입
 	}
 }
 
-void Sub() {
-	for (int32 i = 0; i < 10'0000; ++i) {
-		lock_guard<SpinLock> guard(spinLock);
-		sum--;
+void Consumer() {
+	while (true) {
+		::WaitForSingleObject(handle, INFINITE);
+		// 파란불이면 아래 코드 실행 / 빨간불이면 수면상태(대기, 아래 코드 실행 X), CPU점유율 절감
+		// Auto-Reset(false)에서는 파란불이어서 아래 코드가 실행되면 다시 시그널이 Non-Signal로 바뀐다(자동)
+		::ResetEvent(handle);	// Manual-Reset(true)은 수동으로 코드 쳐줘야함
+
+		// Producer에서 data를 안넣어주면 Consumer는 할필요가 없음 (잉여작업)
+		unique_lock<mutex> lock(m);
+		if (q.empty() == false) {
+			int32 data = q.front();
+			q.pop();
+			cout << data << endl;
+		}
 	}
 }
 
 int main()
 {
-	volatile int32 a = 0;
-	a = 1;
-	a = 2;
-	a = 3;	// Release 모드에서 컴파일러 입장 : 왜 쓸떼없게 a = 1~3을 해주고 있냐 => 무시
-	a = 4;	// -> volatile 입력시, 무시했었던 1~3 초기화 부분도 컴파일해줌 (최적화 X)
-	cout << a << endl;
-
-	std::thread t1(Add);
-	std::thread t2(Sub);
+	// kernel Object (커널에서 관리/사용하는 오브젝트) -> 다른 프로그램 동기화 작업시 사용
+	// Usage Count 이 obj를 몇명이 사용중인지
+	// Signal(파란불, true) / Non-Signal(빨간불, false) << BOOL
+	// Auto / Manual << BOOL
+	handle = ::CreateEvent(NULL/*보안속성*/, FALSE/*MANUAL_RESET*/, FALSE/*binitialState*/,NULL );
+	
+	thread t1(Producer);
+	thread t2(Consumer);
 
 	t1.join();
 	t2.join();
 
-	cout << sum << endl;	// 0
-
 	return 0;
+
+	::CloseHandle(handle);	// 생성 소멸 짝꿍의 느낌
 }
