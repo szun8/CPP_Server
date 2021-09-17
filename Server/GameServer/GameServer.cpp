@@ -6,8 +6,7 @@
 #include <atomic>
 #include <mutex>	// Lock
 
-// part4 ) 1-7 Spin Lock
-// 면접단골질문 
+// part4 ) 1-8 Sleep
 
 class SpinLock {
 public:
@@ -36,7 +35,16 @@ public:
 			// expected는 bool &값을 받고 있어서 매번 값이 바뀌기에
 			// 우리가 원했던 초창기 값으로 바꿔주는 것만 넣어주면 됨 (조심)
 			expected = false;
-		}
+
+			//this_thread::sleep_for(std::chrono::milliseconds(100));
+			this_thread::sleep_for(100ms);
+			// 언제까지 자라 (그 시간동안 재스케줄링이 되지않고 대기를 타다
+			// 시간 경과후, 다시 스케줄링 대상이 돼서 이 쓰레드 실행가능상태 전환)
+
+			this_thread::yield();
+			// 자기가 받은 타임-슬라이스를 바로 양보해 커널모드로 돌아가기
+			// this_thread::sleep_for(0ms); 랑 같은 표현
+			}
 
 		/*while (_locked) {
 			// 두번으로 나뉘어 실행되는 해당 코드를 위에서 한방에 처리
