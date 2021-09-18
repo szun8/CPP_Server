@@ -53,6 +53,33 @@
       return 0;
     ```
     + `DeadLock` 교착상태 : Lock 시점 순서지정 등으로 해결
+    + `context Switching` : thread 변경시, 현재 User Mode, 다음 thread와 Cornul Mode 사이에 정보보유로 발생하는 비용적 문제
 
-    🔅 대기방법 : spinLock, Sleep, Event   
-    + `context Switching` : thread 변경시, 현재 User Mode, 다음 thread와 Cornul Mode 사이에 정보보유로 발생하는 비용적 문제   
+    🔅 대기방법 : spinLock, Sleep, Event  
+    1) SpinLock : 계속 user mode에서 해당 thread가 실행가능할 때까지(다른 thread가 lock을 반환할 떄까지) 루프를 돌면서 재시도하는 lock 동기화 방법(존버)   
+        ✳ `atomic` 사용 : 실행가능한 영역에 thread가 ①들어가고 ②lock을 걸어주는 일을 한번에 실행하기위해 사용
+        ```C++
+            class SpinLock{
+            public:
+                void lock(){
+                    bool expected = false;  // 현재 _locked 의 값을 예상
+                    bool desired = true;    // 원하는 값
+                    
+                    while(_locked.compare_exchange_strong(expected, desired) == false){
+                    // return true : 해당 쓰레드 진입해서 원하는 과정 수행 (while 탈출)
+                    // return false : 다른 누가 사용중이므로 접근 불가상태 (계속 진행)
+                        expected = false;   // 반복할 때마다 false로 바꿔줘야함
+                    }
+                }
+                void unlock(){
+                    _locked.stroe(false);   // _locked = false;
+                }
+            private:
+                atomic<bool> _locked = false;
+            };
+        ```
+    3) Sleep
+    4) Event
+        - AutoResetEvent
+        - ManualResetEvent
+       
