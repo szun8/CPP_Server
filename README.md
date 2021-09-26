@@ -1,7 +1,7 @@
 # CPP_Server
 🌐 part 4 : Game server
 
-목차   
+목 차   
 [1. MultiThread Programming](#1-multithread-programming)
 
 ---
