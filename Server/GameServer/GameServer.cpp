@@ -5,7 +5,7 @@
 #include <thread> 
 #include <atomic>
 #include <mutex>	// Lock
-#include <windows.h>
+// #include <windows.h>
 #include <future>
 
 // part4 ) 1-11 Future
@@ -16,7 +16,7 @@ int64 result;
 
 int64 Calculate() {
 	int64 sum = 0;
-	for (int32 i = 0;i<100'0000; ++i) {
+	for (int32 i = 0;i<1000000; ++i) {
 		sum += i;
 	}
 	result = sum; 
